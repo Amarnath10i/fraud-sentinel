@@ -67,6 +67,13 @@ def _compare(args: argparse.Namespace) -> None:
     print(run())
 
 
+@command("decisions", "Cost out decision policies on the test period")
+def _decisions(args: argparse.Namespace) -> None:
+    from sentinel.experiments.decisions import run
+
+    print(run())
+
+
 @command("sketches", "Benchmark Count-Min Sketch against exact pair counts")
 def _sketches(args: argparse.Namespace) -> None:
     from sentinel.experiments.sketches import run
