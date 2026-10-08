@@ -167,18 +167,29 @@ def build_scorer(at: datetime | None = None) -> Scorer:
     return scorer
 
 
-def create_app(scorer: Scorer | None = None, log_predictions: bool = True) -> FastAPI:
+def create_app(
+    scorer: Scorer | None = None, log_predictions: bool = True, demo: bool = False
+) -> FastAPI:
     state: dict = {}
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         state["scorer"] = scorer or build_scorer()
         state["log"] = PredictionLog(state["scorer"].bundle.version) if log_predictions else None
+        if demo:
+            from sentinel.serve.demo import DemoRunner
+
+            state["demo"] = DemoRunner(state["scorer"], warm_until())
+            state["snapshot"] = snapshot_path(warm_until())
         yield
         if state["log"] is not None:
             state["log"].close()
 
     app = FastAPI(title="fraud-sentinel", version="0.1.0", lifespan=lifespan)
+    if demo:
+        from sentinel.serve.dashboard import attach
+
+        attach(app, state)
 
     @app.get("/health")
     def health() -> dict:

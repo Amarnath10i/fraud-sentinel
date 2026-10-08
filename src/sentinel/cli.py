@@ -101,13 +101,14 @@ def _train(args: argparse.Namespace) -> None:
     "Run the scoring API",
     arg("--host", default="127.0.0.1"),
     arg("--port", type=int, default=8000),
+    arg("--no-demo", action="store_true", help="API only, without the dashboard"),
 )
 def _serve(args: argparse.Namespace) -> None:
     import uvicorn
 
     from sentinel.serve.api import create_app
 
-    uvicorn.run(create_app(), host=args.host, port=args.port)
+    uvicorn.run(create_app(demo=not args.no_demo), host=args.host, port=args.port)
 
 
 @command(
