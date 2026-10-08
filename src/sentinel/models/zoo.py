@@ -98,6 +98,9 @@ LGB_DEFAULTS: dict[str, Any] = dict(
     verbose=-1,
     seed=0,
     num_threads=8,
+    # multithreaded histogram sums are otherwise order-dependent: same seed, different model
+    deterministic=True,
+    force_row_wise=True,
 )
 
 
