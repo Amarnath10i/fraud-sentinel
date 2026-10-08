@@ -67,6 +67,13 @@ def _compare(args: argparse.Namespace) -> None:
     print(run())
 
 
+@command("imbalance", "Compare class-imbalance strategies (weights, resampling, focal loss)")
+def _imbalance(args: argparse.Namespace) -> None:
+    from sentinel.experiments.imbalance import run
+
+    print(run())
+
+
 @command("decisions", "Cost out decision policies on the test period")
 def _decisions(args: argparse.Namespace) -> None:
     from sentinel.experiments.decisions import run
