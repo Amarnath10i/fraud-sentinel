@@ -35,6 +35,31 @@ def _ingest(args: argparse.Namespace) -> None:
         print(f"{name:14s} {len(frame):>10,d}")
 
 
+@command("features", "Materialize the offline feature table in PostgreSQL")
+def _features(args: argparse.Namespace) -> None:
+    from sentinel import db
+    from sentinel.features.build import load_aggregates, materialize
+
+    with db.connect() as conn:
+        seconds = materialize(conn)
+    df = load_aggregates(refresh=True)
+    print(f"{len(df):,} rows x {df.shape[1] - 2} aggregate features in {seconds:.1f}s")
+
+
+@command("parity", "Replay all events through the streaming engine and diff against SQL")
+def _parity(args: argparse.Namespace) -> None:
+    from sentinel.config import settings
+    from sentinel.features.parity import check
+
+    report = check()
+    out = settings.paths.reports / "parity.md"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(report.to_markdown(), encoding="utf-8")
+    print(report.to_markdown())
+    if not report.ok:
+        raise SystemExit(1)
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(prog="sentinel")
