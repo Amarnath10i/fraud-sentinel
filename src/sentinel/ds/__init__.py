@@ -5,12 +5,13 @@ All of them are written from scratch and tested against brute-force references
 """
 
 from sentinel.ds.lru import LRUCache
-from sentinel.ds.sketch import CountMinSketch
+from sentinel.ds.sketch import BloomFilter, CountMinSketch
 from sentinel.ds.topk import TopK
 from sentinel.ds.welford import Welford
 from sentinel.ds.windows import SlidingWindowDistinct, SlidingWindowMax, SlidingWindowSum
 
 __all__ = [
+    "BloomFilter",
     "CountMinSketch",
     "LRUCache",
     "SlidingWindowDistinct",

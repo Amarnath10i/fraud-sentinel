@@ -9,6 +9,7 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from sentinel.ds import (
+    BloomFilter,
     CountMinSketch,
     LRUCache,
     SlidingWindowDistinct,
@@ -174,3 +175,13 @@ def test_topk_keeps_the_k_largest(k, priorities):
         top.push(p, i)
     kept = [p for p, _ in top.items()]
     assert kept == sorted(priorities, reverse=True)[:k]
+
+
+def test_bloom_filter_has_no_false_negatives_and_hits_its_target_rate():
+    bf = BloomFilter.for_capacity(20_000, 0.01)
+    for i in range(20_000):
+        bf.add(("card", i))
+    assert all(("card", i) in bf for i in range(20_000))
+    fp = np.mean([("other", i) in bf for i in range(50_000)])
+    assert 0.003 < fp < 0.02
+    assert bf.nbytes < 25_000  # ~9.6 bits per item

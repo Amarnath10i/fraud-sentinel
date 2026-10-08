@@ -67,6 +67,13 @@ def _compare(args: argparse.Namespace) -> None:
     print(run())
 
 
+@command("sketches", "Benchmark Count-Min Sketch against exact pair counts")
+def _sketches(args: argparse.Namespace) -> None:
+    from sentinel.experiments.sketches import run
+
+    print(run())
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(prog="sentinel")
