@@ -88,6 +88,13 @@ def _sketches(args: argparse.Namespace) -> None:
     print(run())
 
 
+@command("tune", "Optuna search with rolling-origin CV", arg("--trials", type=int, default=20))
+def _tune(args: argparse.Namespace) -> None:
+    from sentinel.experiments.tune import run
+
+    print(run(args.trials))
+
+
 @command("train", "Train, calibrate and register the production model")
 def _train(args: argparse.Namespace) -> None:
     from sentinel.serve.train import train_production

@@ -22,7 +22,7 @@ log = logging.getLogger(__name__)
 def train_production(promote: bool = True) -> Bundle:
     s = splits()
     tr, va = s["train"], s["valid"]
-    params_file = settings.paths.artifacts / "best_params.json"
+    params_file = settings.paths.lightgbm_params
     params = json.loads(params_file.read_text()) if params_file.exists() else {}
     model = LightGBM(params=params).fit(tr.frame, tr.y, va.frame, va.y)
 

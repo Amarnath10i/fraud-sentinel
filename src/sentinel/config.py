@@ -25,6 +25,12 @@ class Paths:
     artifacts: Path = Path(os.environ.get("SENTINEL_ARTIFACTS_DIR", ROOT / "artifacts"))
     reports: Path = ROOT / "reports"
     sql: Path = ROOT / "sql"
+    configs: Path = ROOT / "configs"
+
+    @property
+    def lightgbm_params(self) -> Path:
+        """Tuned hyperparameters, committed so `sentinel train` reproduces without re-tuning."""
+        return self.configs / "lightgbm_params.json"
 
     @property
     def raw_sparkov(self) -> Path:
