@@ -1,0 +1,19 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+*.egg-info/
+dist/
+build/
+
+# data and generated artifacts stay local
+/data/
+/artifacts/
+*.parquet
+*.log
+
+.env
+.vscode/
+.idea/
