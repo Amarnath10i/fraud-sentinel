@@ -60,6 +60,13 @@ def _parity(args: argparse.Namespace) -> None:
         raise SystemExit(1)
 
 
+@command("compare", "Train every model, compare on the test period, run the ablation")
+def _compare(args: argparse.Namespace) -> None:
+    from sentinel.experiments.compare import run
+
+    print(run())
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(prog="sentinel")
