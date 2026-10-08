@@ -41,6 +41,7 @@ packages = ["src/sentinel"]
 testpaths = ["tests"]
 addopts = "-ra"
 markers = ["db: needs a running PostgreSQL (SENTINEL_DB_URL)"]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
 
 [tool.ruff]
 line-length = 100

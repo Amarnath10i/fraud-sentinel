@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import hashlib
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Literal
 
 Stream = Literal["txn", "cb"]
@@ -83,11 +84,11 @@ class FeatureSpec:
         if len(set(names)) != len(names):
             raise ValueError("duplicate feature names")
 
-    @property
+    @cached_property
     def names(self) -> list[str]:
         return [a.name for a in self.aggs]
 
-    @property
+    @cached_property
     def version(self) -> str:
         """Content hash: changes whenever any definition changes."""
         return hashlib.sha1(repr(self.aggs).encode()).hexdigest()[:10]

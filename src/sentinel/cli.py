@@ -81,6 +81,39 @@ def _sketches(args: argparse.Namespace) -> None:
     print(run())
 
 
+@command("train", "Train, calibrate and register the production model")
+def _train(args: argparse.Namespace) -> None:
+    from sentinel.serve.train import train_production
+
+    bundle = train_production()
+    print(f"production model: {bundle.version}")
+
+
+@command(
+    "serve",
+    "Run the scoring API",
+    arg("--host", default="127.0.0.1"),
+    arg("--port", type=int, default=8000),
+)
+def _serve(args: argparse.Namespace) -> None:
+    import uvicorn
+
+    from sentinel.serve.api import create_app
+
+    uvicorn.run(create_app(), host=args.host, port=args.port)
+
+
+@command(
+    "replay",
+    "Stream the test period through the online scorer and check parity/latency",
+    arg("--http", type=int, default=0, help="also send the first N transactions over HTTP"),
+)
+def _replay(args: argparse.Namespace) -> None:
+    from sentinel.serve.replay import run
+
+    print(run(http=args.http))
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(prog="sentinel")

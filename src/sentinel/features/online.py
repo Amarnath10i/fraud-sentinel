@@ -107,7 +107,9 @@ class OnlineFeatureEngine:
 
     # -- public API -------------------------------------------------------
 
-    def process(self, event: Event | Mapping, stream: Stream) -> np.ndarray | None:
+    def process(
+        self, event: Event | Mapping, stream: Stream, compute: bool = True
+    ) -> np.ndarray | None:
         """Feed one event. Returns the feature vector for a transaction, None for a chargeback."""
         ev = event if isinstance(event, tuple) else Event(**{k: event[k] for k in Event._fields})
         ts = ev[0]
@@ -116,9 +118,31 @@ class OnlineFeatureEngine:
         if self._now is None or ts > self._now:
             self._flush()
             self._now = ts
-        out = self._compute(ev) if stream == "txn" else None
+        out = self._compute(ev) if stream == "txn" and compute else None
         self._pending.append((stream, ev))
         return out
+
+    def warm(self, txns: pd.DataFrame, chargebacks: pd.DataFrame) -> int:
+        """Replay history into the state without computing features (service start-up)."""
+        n = 0
+        for _, (stream, ev) in self._merge(txns, chargebacks):
+            self.process(ev, stream, compute=False)
+            n += 1
+        return n
+
+    def peek(self, event: Event) -> np.ndarray:
+        """Features a transaction would get right now, without recording it.
+
+        Only expired window entries are dropped (time never moves backwards),
+        so this does not change any future feature value.
+        """
+        if self._now is not None and event.ts < self._now:
+            raise OutOfOrderEvent(f"peek at {event.ts} before {self._now}")
+        return self._compute(event)
+
+    @property
+    def now(self) -> int | None:
+        return self._now
 
     def run(self, txns: pd.DataFrame, chargebacks: pd.DataFrame) -> pd.DataFrame:
         """Replay both streams in time order and return features for every transaction.
