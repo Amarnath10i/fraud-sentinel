@@ -76,9 +76,7 @@ class Timeline:
 
 @dataclass(frozen=True)
 class Settings:
-    db_url: str = os.environ.get(
-        "SENTINEL_DB_URL", "postgresql://postgres@localhost:5432/sentinel"
-    )
+    db_url: str = os.environ.get("SENTINEL_DB_URL", "postgresql://postgres@localhost:5432/sentinel")
     paths: Paths = field(default_factory=Paths)
     timeline: Timeline = field(default_factory=Timeline)
     chargebacks: ChargebackModel = field(default_factory=ChargebackModel)
