@@ -10,9 +10,9 @@ Cost model: approving a fraud loses its amount; a review costs $3 of analyst tim
 |:--------------------------|------------------:|----------------:|-------:|--------:|-----------:|
 | LightGBM                  |           7e-08   |           0.914 | 0.0003 | 0.00028 |     0.0015 |
 | LightGBM + isotonic       |           0       |           0.936 | 0.0001 | 0.00022 |     0.0022 |
-| LightGBM balanced weights |           7.6e-10 |           0.949 | 0.0001 | 0.00021 |     0.0014 |
-| balanced + Platt          |           3.9e-06 |           0.943 | 0.0001 | 0.0002  |     0.001  |
-| balanced + isotonic       |           0       |           0.941 | 0.0001 | 0.0002  |     0.0022 |
+| LightGBM balanced weights |           3.1e-10 |           0.949 | 0.0001 | 0.00021 |     0.0014 |
+| balanced + Platt          |           4.3e-06 |           0.943 | 0.0001 | 0.0002  |     0.001  |
+| balanced + isotonic       |           0       |           0.941 | 0.0001 | 0.00021 |     0.0021 |
 
 ## Policies (total cost with 95% card-level bootstrap interval)
 
@@ -22,8 +22,8 @@ Cost model: approving a fraud loses its amount; a review costs $3 of analyst tim
 | decline if p >= 0.5                           | 47,814 (37,289-61,761)          |             47,549 |         0 |                 0 |       1987 |               12 |               170 |
 | decline if p >= 0.189 (best F1 on validation) | 31,860 (23,095-40,831)          |             31,279 |         0 |                 0 |       2051 |               26 |               120 |
 | review top 0.5% of scores                     | 68,580 (60,869-76,502)          |              3,072 |      2779 |                46 |          0 |                0 |                25 |
-| Bayes, balanced-weight scores (miscalibrated) | 12,442 (7,600-17,898)           |             10,992 |        91 |                 5 |       2073 |               30 |                77 |
-| Bayes, balanced-weight scores + isotonic      | 7,200 (4,585-9,973)             |              4,210 |       357 |                10 |       2064 |               30 |                61 |
+| Bayes, balanced-weight scores (miscalibrated) | 13,376 (7,871-18,826)           |             12,003 |        79 |                 6 |       2070 |               29 |                80 |
+| Bayes, balanced-weight scores + isotonic      | 6,963 (4,185-9,556)             |              3,928 |       362 |                10 |       2062 |               32 |                56 |
 | Bayes, LightGBM + isotonic                    | 7,145 (4,199-10,603)            |              3,916 |       380 |                 7 |       2034 |               24 |                57 |
 | Bayes + isotonic, max 4 reviews/day           | 7,204 (4,279-10,680)            |              4,074 |       356 |                 4 |       2042 |               27 |                60 |
 | conformal sets (alpha fraud 5%, legit 0.2%)   | 9,705 (6,238-14,233)            |              5,356 |       533 |                13 |       1994 |               14 |                34 |
