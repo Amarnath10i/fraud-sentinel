@@ -95,6 +95,13 @@ def _tune(args: argparse.Namespace) -> None:
     print(run(args.trials))
 
 
+@command("backtest", "Simulate 18 months of deployment under different retraining policies")
+def _backtest(args: argparse.Namespace) -> None:
+    from sentinel.experiments.backtest import run
+
+    print(run())
+
+
 @command("train", "Train, calibrate and register the production model")
 def _train(args: argparse.Namespace) -> None:
     from sentinel.serve.train import train_production
