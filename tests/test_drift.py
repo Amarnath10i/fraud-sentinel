@@ -3,7 +3,7 @@ import pandas as pd
 import pytest
 from scipy import stats
 
-from sentinel.monitoring.drift import adversarial_validation, ks_statistic, psi
+from sentinel.monitoring.drift import adversarial_validation, alert_rate_ratio, ks_statistic, psi
 
 
 def test_psi_is_near_zero_for_same_distribution_and_grows_with_shift():
@@ -39,3 +39,19 @@ def test_adversarial_validation_finds_the_drifting_feature():
     assert auc_same < 0.53
     assert auc_moved > 0.65
     assert importance.index[0] == "b"
+
+
+def test_score_psi_needs_fixed_bins_on_zero_inflated_scores():
+    from sentinel.monitoring.drift import SCORE_EDGES
+
+    rng = np.random.default_rng(4)
+    n = 200_000
+    ref = np.where(rng.random(n) < 0.97, 0.0, rng.uniform(0.001, 1, n))
+    cur = np.where(rng.random(n) < 0.985, 0.0, rng.uniform(0.001, 1, n))  # half the alert volume
+    # quantile bins collapse onto the zeros and see nothing at all
+    assert psi(ref, cur) == 0.0
+    # fixed bins see it, but PSI stays tiny: it weights bins by mass, and 97% of
+    # the mass did not move, so the usual 0.1 / 0.25 thresholds never fire
+    assert 0.0 < psi(ref, cur, edges=SCORE_EDGES) < 0.1
+    # the alert-rate ratio is the signal that tracks what changed
+    assert alert_rate_ratio(ref, cur) == pytest.approx(0.5, abs=0.05)
