@@ -8,7 +8,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
-from sentinel import db
+from sentinel.serve.bundle import registry_rows
 
 STATIC = Path(__file__).parent / "static"
 
@@ -40,11 +40,11 @@ class ManualTxn(BaseModel):
     distance_km: float | None = Field(None, ge=0, le=20_000)
 
 
-def attach(app: FastAPI, state: dict) -> None:
+def attach(app: FastAPI, state: dict, index_path: str = "/") -> None:
     def demo():
         return state["demo"]
 
-    @app.get("/", include_in_schema=False)
+    @app.get(index_path, include_in_schema=False)
     def index() -> FileResponse:
         return FileResponse(STATIC / "index.html")
 
@@ -115,16 +115,8 @@ def attach(app: FastAPI, state: dict) -> None:
     @app.get("/v1/demo/monitoring")
     def demo_monitoring() -> dict:
         out = demo().monitoring()
-        try:
-            with db.connect() as conn:
-                rows = conn.execute(
-                    "SELECT version, created_at, stage, metrics FROM model_registry "
-                    "ORDER BY created_at DESC LIMIT 10"
-                ).fetchall()
-            out["registry"] = [
-                {"version": v, "created_at": c.isoformat(), "stage": s, "metrics": m}
-                for v, c, s, m in rows
-            ]
-        except Exception:  # the dashboard should still render without the database
-            out["registry"] = []
+        out["registry"] = [
+            {k: r[k] for k in ("version", "created_at", "stage", "metrics")}
+            for r in registry_rows()[:10]
+        ]
         return out

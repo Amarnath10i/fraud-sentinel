@@ -20,9 +20,14 @@ from sentinel.config import settings
 _CHUNK = 8 << 20
 
 
+def enabled() -> bool:
+    """False when the deployment has no database (SENTINEL_DB_URL=none)."""
+    return settings.db_url.strip().lower() not in ("", "none")
+
+
 def connect(url: str | None = None, *, autocommit: bool = False) -> psycopg.Connection:
-    """Open a connection whose session time zone is UTC."""
-    conninfo = make_conninfo(url or settings.db_url, options="-c timezone=UTC")
+    """Open a connection whose session time zone is UTC (fails after 5 s, never hangs)."""
+    conninfo = make_conninfo(url or settings.db_url, options="-c timezone=UTC", connect_timeout=5)
     return psycopg.connect(conninfo, autocommit=autocommit)
 
 

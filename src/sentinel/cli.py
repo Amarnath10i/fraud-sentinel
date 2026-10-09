@@ -136,6 +136,21 @@ def _replay(args: argparse.Namespace) -> None:
     print(run(http=args.http))
 
 
+@command(
+    "export-demo",
+    "Write the data pack the public demo runs on (no PostgreSQL needed)",
+    arg("--out", default="build/space/demo"),
+)
+def _export_demo(args: argparse.Namespace) -> None:
+    from pathlib import Path
+
+    from sentinel.serve.export import export_demo
+
+    sizes = export_demo(Path(args.out))
+    for name, size in sorted(sizes.items()):
+        print(f"{size / 1e6:8.1f} MB  {name}")
+
+
 def main(argv: list[str] | None = None) -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(message)s")
     parser = argparse.ArgumentParser(prog="sentinel")

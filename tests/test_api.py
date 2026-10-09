@@ -177,3 +177,32 @@ def test_retries_are_idempotent_and_do_not_inflate_velocity(scorer):
         later = int((t + pd.Timedelta(minutes=5)).timestamp())
         features = s.engine.process(Event(later, 1_000, 2, 1, "misc_net"), "txn")
         assert features[SPARKOV.names.index("card__count_1h")] == 1
+
+
+def test_static_frontend_is_served_after_the_api(scorer, tmp_path, monkeypatch):
+    (tmp_path / "live").mkdir()
+    (tmp_path / "index.html").write_text("<html>overview</html>")
+    (tmp_path / "live" / "index.html").write_text("<html>live</html>")
+    monkeypatch.setenv("SENTINEL_FRONTEND_DIR", str(tmp_path))
+    s, _ = scorer
+    with TestClient(create_app(scorer=s, log_predictions=False)) as client:
+        assert "overview" in client.get("/").text
+        assert "live" in client.get("/live/").text
+        assert client.get("/health").json()["status"] == "ok"  # API routes win
+
+
+def test_registry_falls_back_to_snapshot_without_a_database(monkeypatch, tmp_path):
+    import json
+    from dataclasses import replace
+
+    from sentinel import db
+    from sentinel.config import Paths, settings
+    from sentinel.serve import bundle
+
+    rows = [{"version": "v2", "stage": "production"}, {"version": "v1", "stage": "archived"}]
+    (tmp_path / "registry.json").write_text(json.dumps(rows))
+    test_settings = replace(settings, db_url="none", paths=Paths(artifacts=tmp_path))
+    monkeypatch.setattr(db, "settings", test_settings)
+    monkeypatch.setattr(bundle, "settings", test_settings)
+    assert not db.enabled()
+    assert bundle.registry_rows() == rows

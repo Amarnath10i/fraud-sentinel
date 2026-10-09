@@ -114,6 +114,37 @@ def register(bundle: Bundle, path: Path, promote: bool = True) -> None:
     log.info("registered %s%s", bundle.version, " as production" if promote else "")
 
 
+REGISTRY_COLUMNS = [
+    "version", "created_at", "stage", "algorithm", "feature_set", "train_start", "train_end",
+    "label_cutoff", "params", "metrics",
+]  # fmt: skip
+
+
+def registry_rows() -> list[dict]:
+    """Model registry, newest first.
+
+    Read from PostgreSQL; a deployment without a database (the public demo)
+    ships `registry.json`, exported with `sentinel export-demo`, instead.
+    """
+    snapshot = settings.paths.artifacts / "registry.json"
+    if not db.enabled():
+        return json.loads(snapshot.read_text()) if snapshot.exists() else []
+    try:
+        with db.connect() as conn:
+            rows = conn.execute(
+                f"SELECT {', '.join(REGISTRY_COLUMNS)} FROM model_registry ORDER BY created_at DESC"
+            ).fetchall()
+        return [
+            {
+                c: (v.isoformat() if isinstance(v, datetime) else v)
+                for c, v in zip(REGISTRY_COLUMNS, r, strict=True)
+            }
+            for r in rows
+        ]
+    except Exception:
+        return json.loads(snapshot.read_text()) if snapshot.exists() else []
+
+
 def production_path() -> Path:
     with db.connect() as conn:
         row = conn.execute(

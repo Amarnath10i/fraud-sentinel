@@ -30,13 +30,14 @@ import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from sentinel import db
-from sentinel.config import settings
+from sentinel.config import ROOT, settings
 from sentinel.features.online import OutOfOrderEvent
 from sentinel.features.spec import SPARKOV
-from sentinel.serve.bundle import Bundle, production_path
+from sentinel.serve.bundle import Bundle, production_path, registry_rows
 from sentinel.serve.scorer import Scored, Scorer, UnknownCard
 
 log = logging.getLogger(__name__)
@@ -153,8 +154,13 @@ def snapshot_path(until: pd.Timestamp) -> Path:
 
 
 def build_scorer(at: datetime | None = None) -> Scorer:
-    """Production bundle + online state warmed from history (snapshot cached)."""
-    bundle = Bundle.load(production_path())
+    """Production bundle + online state warmed from history (snapshot cached).
+
+    `SENTINEL_BUNDLE_DIR` loads a bundle directly instead of asking the registry,
+    for deployments without PostgreSQL.
+    """
+    bundle_dir = os.environ.get("SENTINEL_BUNDLE_DIR")
+    bundle = Bundle.load(Path(bundle_dir) if bundle_dir else production_path())
     p = settings.paths.processed
     scorer = Scorer(bundle, pd.read_parquet(p / "customers.parquet"))
     until = warm_until(at)
@@ -172,9 +178,17 @@ def build_scorer(at: datetime | None = None) -> Scorer:
     return scorer
 
 
+def frontend_dir() -> Path | None:
+    """The statically exported Next.js app, if one has been built."""
+    path = Path(os.environ.get("SENTINEL_FRONTEND_DIR", ROOT / "frontend" / "out"))
+    return path if (path / "index.html").exists() else None
+
+
 def create_app(
-    scorer: Scorer | None = None, log_predictions: bool = True, demo: bool = False
+    scorer: Scorer | None = None, log_predictions: bool | None = None, demo: bool = False
 ) -> FastAPI:
+    if log_predictions is None:
+        log_predictions = os.environ.get("SENTINEL_LOG_PREDICTIONS", "1") != "0"
     state: dict = {}
 
     @asynccontextmanager
@@ -198,10 +212,6 @@ def create_app(
     app.add_middleware(
         CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"]
     )
-    if demo:
-        from sentinel.serve.dashboard import attach
-
-        attach(app, state)
 
     @app.get("/health")
     def health() -> dict:
@@ -225,24 +235,7 @@ def create_app(
         share = gain / gain.sum() if gain.sum() else gain
         order = np.argsort(-share)
         importance = [{"feature": b.features[i], "gain_share": float(share[i])} for i in order]
-        try:
-            with db.connect() as conn:
-                rows = conn.execute(
-                    "SELECT version, created_at, stage, algorithm, feature_set, train_start, "
-                    "train_end, label_cutoff, params, metrics FROM model_registry "
-                    "ORDER BY created_at DESC"
-                ).fetchall()
-        except Exception:  # still useful without the database
-            rows = []
-        cols = ["version", "created_at", "stage", "algorithm", "feature_set", "train_start",
-                "train_end", "label_cutoff", "params", "metrics"]  # fmt: skip
-        registry = [
-            {
-                c: (v.isoformat() if isinstance(v, datetime) else v)
-                for c, v in zip(cols, r, strict=True)
-            }
-            for r in rows
-        ]
+        registry = registry_rows()
         return {
             "production": {
                 "version": b.version,
@@ -295,6 +288,15 @@ def create_app(
         except OutOfOrderEvent as e:
             raise HTTPException(409, str(e)) from e
 
+    # The web frontend, when built as static files, is served from the same
+    # origin; mounted last so every API route above takes precedence.
+    web = frontend_dir()
+    if demo:
+        from sentinel.serve.dashboard import attach
+
+        attach(app, state, index_path="/classic" if web else "/")
+    if web is not None:
+        app.mount("/", StaticFiles(directory=web, html=True), name="web")
     return app
 
 
