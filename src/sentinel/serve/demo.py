@@ -347,18 +347,30 @@ class DemoRunner:
                 self.stats["chargebacks"] += 1
 
     def score_manual(
-        self, card_id: int, merchant_id: int, category: str, amount: float, away: bool
+        self,
+        card_id: int,
+        merchant_id: int,
+        category: str,
+        amount: float,
+        away: bool,
+        distance_km: float | None = None,
     ) -> dict:
+        """Score and record a real transaction at the replay clock. `distance_km`
+        places the merchant exactly (due north of home, as in what-if); otherwise
+        `away` picks a random spot ~800 km away or around the corner."""
         c = self.customers.loc[card_id]
         rng = np.random.default_rng()
         offset = 7.0 if away else 0.1  # degrees: ~800 km away vs around the corner
+        if distance_km is not None:
+            lat, lon = float(c["home_lat"]) + distance_km / 111.2, float(c["home_lon"])
+        else:
+            lat = float(c["home_lat"] + rng.uniform(-offset, offset))
+            lon = float(c["home_lon"] + rng.uniform(-offset, offset))
         with self.lock:
             now = self.scorer.engine.now
             txn = {
                 "txn_id": uuid.uuid4().hex, "ts": now, "card_id": card_id, "merchant_id": merchant_id,
-                "category": category, "amount": amount,
-                "merch_lat": float(c["home_lat"] + rng.uniform(-offset, offset)),
-                "merch_lon": float(c["home_lon"] + rng.uniform(-offset, offset)),
+                "category": category, "amount": amount, "merch_lat": lat, "merch_lon": lon,
             }  # fmt: skip
             s = self.scorer.score(txn)
             item = self._record(s, txn, truth=None, manual=True)
@@ -373,7 +385,7 @@ class DemoRunner:
                     "label": f"•••• {str(r.card_id)[-4:]} · {r.city}, {r.state}",
                 }
                 for r in cards.itertuples(index=False)
-            ][:300],
+            ],
             "merchants": [
                 {"merchant_id": int(k), "name": v} for k, v in sorted(self.merchant_names.items())
             ],

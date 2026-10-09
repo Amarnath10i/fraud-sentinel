@@ -37,6 +37,7 @@ class ManualTxn(BaseModel):
     category: str
     amount: float = Field(gt=0, le=100_000)
     away: bool = False
+    distance_km: float | None = Field(None, ge=0, le=20_000)
 
 
 def attach(app: FastAPI, state: dict) -> None:
@@ -85,7 +86,9 @@ def attach(app: FastAPI, state: dict) -> None:
     @app.post("/v1/demo/score")
     def demo_score(t: ManualTxn) -> dict:
         try:
-            return demo().score_manual(t.card_id, t.merchant_id, t.category, t.amount, t.away)
+            return demo().score_manual(
+                t.card_id, t.merchant_id, t.category, t.amount, t.away, t.distance_km
+            )
         except KeyError as e:
             raise HTTPException(404, f"unknown card {t.card_id}") from e
 
