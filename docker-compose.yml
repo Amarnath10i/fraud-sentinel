@@ -1,4 +1,4 @@
-# PostgreSQL + scoring API. Build the data and model first (see README), then:
+# PostgreSQL + scoring API + web frontend. Build the data and model first (see README), then:
 #   docker compose up --build
 services:
   db:
@@ -26,6 +26,14 @@ services:
       - ./data:/app/data
       - ./artifacts:/app/artifacts
     ports: ["8000:8000"]
+
+  web:
+    build:
+      context: frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000
+    depends_on: [api]
+    ports: ["3000:3000"]
 
 volumes:
   pgdata:
