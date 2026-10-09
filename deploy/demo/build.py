@@ -1,11 +1,13 @@
-"""Assemble the Hugging Face Space build context in build/space, optionally upload it.
+"""Assemble the public-demo build context in build/demo, optionally upload it.
 
-    uv run python deploy/huggingface/build_space.py                 # assemble only
-    uv run python deploy/huggingface/build_space.py --upload USER/fraud-sentinel
+    uv run python deploy/demo/build.py                              # assemble only
+    cd build/demo && railway up                                     # deploy on Railway
+    uv run --with huggingface_hub python deploy/demo/build.py --upload-hf USER/fraud-sentinel
 
-Needs PostgreSQL with a registered production model (for the registry
-snapshot), the processed data, the online-state snapshot (start `sentinel
-serve` once) and Node.js for the static frontend export.
+The context is one Docker image: API + live replay + static frontend, no
+PostgreSQL. Building it needs PostgreSQL with a registered production model
+(for the registry snapshot), the processed data, the online-state snapshot
+(start `sentinel serve` once) and Node.js for the static frontend export.
 """
 
 from __future__ import annotations
@@ -62,14 +64,16 @@ def upload(out: Path, repo_id: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--out", type=Path, default=ROOT / "build" / "space")
-    parser.add_argument("--upload", metavar="REPO_ID", help="e.g. amarnath10/fraud-sentinel")
+    parser.add_argument("--out", type=Path, default=ROOT / "build" / "demo")
+    parser.add_argument(
+        "--upload-hf", metavar="REPO_ID", help="Hugging Face Space, e.g. amarnath10/fraud-sentinel"
+    )
     args = parser.parse_args()
     assemble(args.out)
     size = sum(f.stat().st_size for f in args.out.rglob("*") if f.is_file()) / 1e6
     print(f"build context: {args.out} ({size:.0f} MB)")
-    if args.upload:
-        print(upload(args.out, args.upload))
+    if args.upload_hf:
+        print(upload(args.out, args.upload_hf))
 
 
 if __name__ == "__main__":

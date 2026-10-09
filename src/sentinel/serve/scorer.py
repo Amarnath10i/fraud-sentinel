@@ -79,7 +79,7 @@ class Scorer:
         bundle: Bundle,
         customers: pd.DataFrame,
         capacity: int | None = None,
-        recent_capacity: int = 200_000,
+        recent_capacity: int = 100_000,
     ):
         if bundle.feature_spec != SPARKOV.version:
             raise ValueError(
@@ -208,7 +208,7 @@ class Scorer:
             action = int(bayes_policy([p], [float(txn["amount"])], self.bundle.costs)[0])
             reasons = [] if action == APPROVE else self.reasons(x)
             out = Scored(str(txn["txn_id"]), p, ACTION_NAMES[action], reasons, x=x)
-            self.recent.put(key, out)
+            self.recent.put(key, replace(out, x=None))  # retries need the decision, not the inputs
         return replace(out, latency_ms=(time.perf_counter() - t0) * 1e3)
 
     def whatif(self, txn: dict, hour: int | None = None) -> dict:

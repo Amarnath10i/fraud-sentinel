@@ -31,4 +31,4 @@ allows `http://localhost:3000` through CORS by default (`SENTINEL_CORS_ORIGINS`)
 
 Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` (all run in CI).
 
-`NEXT_OUTPUT=export NEXT_PUBLIC_API_URL= npm run build` exports a static site to `out/`, which `sentinel serve` serves on the API's own origin; that is how the public demo runs (`deploy/huggingface/`). Detail pages take their id as a query parameter so every page can be exported statically.
+`NEXT_OUTPUT=export NEXT_PUBLIC_API_URL= npm run build` exports a static site to `out/`, which `sentinel serve` serves on the API's own origin; that is how the public demo runs (`deploy/demo/`). Detail pages take their id as a query parameter so every page can be exported statically.

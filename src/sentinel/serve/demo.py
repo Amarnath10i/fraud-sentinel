@@ -12,8 +12,11 @@ transactions are scored with that knowledge, exactly as in production.
 
 from __future__ import annotations
 
+import contextlib
+import ctypes
 import heapq
 import logging
+import sys
 import threading
 import time
 import uuid
@@ -74,22 +77,32 @@ class DemoRunner:
         self.costs = scorer.bundle.costs
         self.start = pd.Timestamp(start or settings.timeline.deploy_at)
         p = settings.paths.processed
-        tx = pd.read_parquet(p / "transactions.parquet")
-        tx["txn_id"] = tx["txn_id"].astype(str)
-        truth = pd.read_parquet(p / "ground_truth.parquet").astype({"txn_id": str})
+        # Read only what the replay needs, filtered inside Parquet: loading the
+        # whole history and slicing it costs ~400 MB of RSS that the allocator
+        # keeps afterwards, which is what a small deployment pays for.
+        test = pd.read_parquet(p / "transactions.parquet", filters=[("ts", ">=", self.start)])
+        test["txn_id"] = test["txn_id"].astype(str)
+        truth = pd.read_parquet(
+            p / "ground_truth.parquet", filters=[("txn_id", "in", test["txn_id"].tolist())]
+        ).astype({"txn_id": str})
+        cbs = pd.read_parquet(
+            p / "chargebacks.parquet", filters=[("reported_at", ">=", self.start)]
+        ).astype({"txn_id": str})
+        reported = pd.read_parquet(
+            p / "transactions.parquet",
+            columns=["txn_id", "card_id", "merchant_id", "category", "amount"],
+            filters=[("txn_id", "in", cbs["txn_id"].tolist())],
+        ).astype({"txn_id": str})
         merchants = pd.read_parquet(p / "merchants.parquet")
         customers = pd.read_parquet(p / "customers.parquet")
-        cb = pd.read_parquet(p / "chargebacks.parquet").astype({"txn_id": str})
 
         self.merchant_names = dict(zip(merchants["merchant_id"], merchants["name"], strict=True))
         self.customers = customers.set_index("card_id")
-        self.categories = sorted(tx["category"].unique())
-        test = tx[tx["ts"] >= self.start].merge(truth, on="txn_id")
-        cbs = cb[cb["reported_at"] >= self.start].merge(
-            tx[["txn_id", "card_id", "merchant_id", "category", "amount"]], on="txn_id"
-        )
-        self._tx = test.reset_index(drop=True)
-        self._cb = cbs.reset_index(drop=True)
+        self._tx = test.merge(truth, on="txn_id").astype({"category": "category"})
+        self._cb = cbs.merge(reported, on="txn_id").reset_index(drop=True)
+        self.categories = sorted(self._tx["category"].unique())
+        del test, truth, cbs, reported
+        _release_memory()
         ts = np.concatenate([self._tx["ts"].to_numpy(), self._cb["reported_at"].to_numpy()])
         kind = np.r_[np.zeros(len(self._tx), np.int8), np.ones(len(self._cb), np.int8)]
         self._order = np.lexsort((kind, ts))
@@ -415,6 +428,19 @@ class DemoRunner:
                 for pol, grp in bt.groupby("policy")
             }
         return out
+
+
+def _release_memory() -> None:
+    """Hand freed buffers back to the OS so the resident size reflects live data."""
+    import gc
+
+    import pyarrow as pa
+
+    gc.collect()
+    pa.default_memory_pool().release_unused()
+    if sys.platform.startswith("linux"):
+        with contextlib.suppress(OSError):
+            ctypes.CDLL("libc.so.6").malloc_trim(0)
 
 
 def _clean(v: float) -> float | None:
