@@ -158,6 +158,13 @@ background thread that drops and counts rows rather than ever blocking
 authorization. Models are versioned bundles registered in `model_registry`;
 a partial unique index guarantees a single production model.
 
+Scoring is **idempotent per `txn_id`**. Payment networks retry
+authorizations; without deduplication a retry would be counted twice in the
+card's velocity features and could push a legitimate customer towards a
+decline. Recent decisions live in an LRU keyed by the canonical transaction
+id, and a retry returns the original decision without touching the online
+state (`"duplicate": true` in the response).
+
 The replay harness streams the whole test period through the online scorer
 and checks that every served probability equals the offline one
 ([`reports/replay.md`](reports/replay.md)).

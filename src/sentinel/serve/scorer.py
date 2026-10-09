@@ -10,6 +10,11 @@ engine that is tested for exact parity with the SQL training features. The
 replay check (`serve/replay.py`) confirms the whole path end to end: served
 probabilities equal the offline ones for every test transaction.
 
+Scoring is idempotent: payment networks retry authorizations, and a retried
+request must not be counted twice in the card's velocity features. A repeated
+txn_id returns the original decision from an LRU of recent transactions and
+leaves the online state untouched.
+
 The engine is not thread-safe, so scoring is serialized with a lock. Scaling
 out would mean sharding by card so each card's state lives in one worker; the
 merchant/category/global aggregates would then have to move to a shared store.
@@ -20,7 +25,8 @@ from __future__ import annotations
 import pickle
 import threading
 import time
-from dataclasses import dataclass, field
+import uuid
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +34,7 @@ import numpy as np
 import pandas as pd
 
 from sentinel.decision import ACTION_NAMES, APPROVE, bayes_policy
+from sentinel.ds import LRUCache
 from sentinel.features.events import engine_frames
 from sentinel.features.online import Event, OnlineFeatureEngine
 from sentinel.features.rows import derived_features, row_features
@@ -44,10 +51,19 @@ class Scored:
     decision: str
     reasons: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
+    duplicate: bool = False  # a retry of a transaction already scored
 
 
 class UnknownCard(KeyError):
     pass
+
+
+def _txn_key(txn_id) -> str:
+    """Canonical id so "6c3f...70" and "6c3f-...-70" are the same transaction."""
+    try:
+        return uuid.UUID(str(txn_id)).hex
+    except ValueError:
+        return str(txn_id)
 
 
 def _epoch(ts: datetime | pd.Timestamp) -> int:
@@ -57,7 +73,13 @@ def _epoch(ts: datetime | pd.Timestamp) -> int:
 
 
 class Scorer:
-    def __init__(self, bundle: Bundle, customers: pd.DataFrame, capacity: int | None = None):
+    def __init__(
+        self,
+        bundle: Bundle,
+        customers: pd.DataFrame,
+        capacity: int | None = None,
+        recent_capacity: int = 200_000,
+    ):
         if bundle.feature_spec != SPARKOV.version:
             raise ValueError(
                 f"model trained on feature spec {bundle.feature_spec}, engine runs {SPARKOV.version}"
@@ -75,6 +97,7 @@ class Scorer:
             )
             for r, d in zip(customers.itertuples(index=False), dob_days, strict=True)
         }
+        self.recent: LRUCache[str, Scored] = LRUCache(recent_capacity)
         self.lock = threading.Lock()
 
     # -- state ------------------------------------------------------------
@@ -142,15 +165,19 @@ class Scorer:
 
     def score(self, txn: dict) -> Scored:
         t0 = time.perf_counter()
-        ts = txn["ts"] if isinstance(txn["ts"], int) else _epoch(txn["ts"])
+        key = _txn_key(txn["txn_id"])
         with self.lock:
+            seen = self.recent.get(key)
+            if seen is not None:
+                return replace(seen, duplicate=True, latency_ms=(time.perf_counter() - t0) * 1e3)
+            ts = txn["ts"] if isinstance(txn["ts"], int) else _epoch(txn["ts"])
             x = self._vector(txn, ts)
-        p = float(self.bundle.predict(x)[0])
-        action = int(bayes_policy([p], [float(txn["amount"])], self.bundle.costs)[0])
-        reasons = [] if action == APPROVE else self.reasons(x)
-        return Scored(
-            str(txn["txn_id"]), p, ACTION_NAMES[action], reasons, (time.perf_counter() - t0) * 1e3
-        )
+            p = float(self.bundle.predict(x)[0])
+            action = int(bayes_policy([p], [float(txn["amount"])], self.bundle.costs)[0])
+            reasons = [] if action == APPROVE else self.reasons(x)
+            out = Scored(str(txn["txn_id"]), p, ACTION_NAMES[action], reasons)
+            self.recent.put(key, out)
+        return replace(out, latency_ms=(time.perf_counter() - t0) * 1e3)
 
     def chargeback(self, cb: dict) -> None:
         ts = cb["reported_at"] if isinstance(cb["reported_at"], int) else _epoch(cb["reported_at"])

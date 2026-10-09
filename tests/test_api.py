@@ -1,5 +1,7 @@
 """API contract tests on a tiny model trained on synthetic data (no real artifacts needed)."""
 
+import uuid
+
 import lightgbm as lgb
 import numpy as np
 import pandas as pd
@@ -48,7 +50,7 @@ def scorer(tmp_path_factory):
 
 def _txn(ts, **kw):
     body = {
-        "txn_id": "0" * 31 + "f",
+        "txn_id": uuid.uuid4().hex,  # every call is a new transaction unless told otherwise
         "ts": ts.isoformat(),
         "card_id": 1,
         "merchant_id": 2,
@@ -155,3 +157,23 @@ def test_online_scorer_equals_offline_pipeline(tmp_path):
             scorer.chargeback(r)
     online = pd.Series(online)
     np.testing.assert_allclose(online.loc[offline.index].to_numpy(), offline.to_numpy(), atol=1e-12)
+
+
+def test_retries_are_idempotent_and_do_not_inflate_velocity(scorer):
+    from sentinel.features.online import Event
+
+    s, last = scorer
+    with TestClient(create_app(scorer=s, log_predictions=False)) as client:
+        t = last + pd.Timedelta(hours=3)
+        body = _txn(t, txn_id="ab" * 16, card_id=2, amount=40.0)
+        first = client.post("/v1/score", json=body).json()
+        # same transaction again, id written with dashes: a network retry
+        retry = client.post(
+            "/v1/score", json=body | {"txn_id": "abababab-abab-abab-abab-abababababab"}
+        ).json()
+        assert not first["duplicate"] and retry["duplicate"]
+        assert (retry["p_fraud"], retry["decision"]) == (first["p_fraud"], first["decision"])
+        # the next transaction on the card sees one earlier transaction in the last hour, not two
+        later = int((t + pd.Timedelta(minutes=5)).timestamp())
+        features = s.engine.process(Event(later, 1_000, 2, 1, "misc_net"), "txn")
+        assert features[SPARKOV.names.index("card__count_1h")] == 1

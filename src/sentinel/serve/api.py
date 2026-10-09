@@ -71,6 +71,7 @@ class ScoreOut(BaseModel):
     reasons: list[Reason]
     model_version: str
     latency_ms: float
+    duplicate: bool = Field(False, description="True if this txn_id was already scored (a retry)")
 
 
 class PredictionLog:
@@ -215,12 +216,12 @@ def create_app(
             raise HTTPException(404, f"unknown card {e.args[0]}") from e
         except OutOfOrderEvent as e:
             raise HTTPException(409, str(e)) from e
-        if state["log"] is not None:
+        if state["log"] is not None and not out.duplicate:
             state["log"].put(out)
         return ScoreOut(
             txn_id=txn.txn_id, p_fraud=out.p_fraud, decision=out.decision,
             reasons=[Reason(**r) for r in out.reasons], model_version=s.bundle.version,
-            latency_ms=out.latency_ms,
+            latency_ms=out.latency_ms, duplicate=out.duplicate,
         )  # fmt: skip
 
     @app.post("/v1/chargebacks", status_code=204)
