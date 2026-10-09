@@ -45,12 +45,12 @@ export default function ReviewPage() {
                   <tr key={it.txn_id} className="border-b border-grid">
                     <td className="tabular px-2 py-1.5 whitespace-nowrap">{fmt.dateTime(it.ts).slice(5, 16)}</td>
                     <td className="px-2 py-1.5">
-                      <Link href={`/cards/${it.card_id}`} className="hover:underline">
+                      <Link href={`/card?id=${it.card_id}`} className="hover:underline">
                         {fmt.card(it.card_id)}
                       </Link>
                     </td>
                     <td className="max-w-[220px] px-2 py-1.5">
-                      <Link href={`/transactions/${it.txn_id}`} className="block truncate hover:underline">
+                      <Link href={`/transaction?id=${it.txn_id}`} className="block truncate hover:underline">
                         {it.merchant}
                       </Link>
                       <div className="text-[11.5px] text-muted">{it.category}</div>

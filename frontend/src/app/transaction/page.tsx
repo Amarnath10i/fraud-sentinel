@@ -1,8 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CostBars, Waterfall } from "@/components/charts";
 import { CardState } from "@/components/feed";
@@ -11,8 +12,8 @@ import { api } from "@/lib/api";
 import { featureLabel, featureValue } from "@/lib/features";
 import { fmt } from "@/lib/format";
 
-export default function TransactionPage() {
-  const { id } = useParams<{ id: string }>();
+function TransactionPageInner() {
+  const id = useSearchParams().get("id") ?? "";
   const qc = useQueryClient();
   const txn = useQuery({ queryKey: ["txn", id], queryFn: () => api.transaction(id) });
   const resolve = useMutation({
@@ -135,5 +136,13 @@ export default function TransactionPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TransactionPage() {
+  return (
+    <Suspense fallback={<Empty>Loading…</Empty>}>
+      <TransactionPageInner />
+    </Suspense>
   );
 }

@@ -105,7 +105,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { state, error } = useLive();
   const queue = useQuery({ queryKey: ["queue"], queryFn: api.queue, refetchInterval: 3000 });
-  const active = (href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
+  const active = (href: string) =>
+    href === "/"
+      ? pathname === "/"
+      : pathname.startsWith(href) || (href === "/experiments" && pathname.startsWith("/experiment"));
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[220px_minmax(0,1fr)]">

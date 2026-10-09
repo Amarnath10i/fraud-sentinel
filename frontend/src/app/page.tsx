@@ -108,7 +108,7 @@ export default function Overview() {
               {alerts.map((a) => (
                 <li key={a.txn_id}>
                   <Link
-                    href={`/transactions/${a.txn_id}`}
+                    href={`/transaction?id=${a.txn_id}`}
                     className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent-wash"
                   >
                     <span className="min-w-0">

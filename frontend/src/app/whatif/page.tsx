@@ -85,7 +85,7 @@ function WhatIf() {
   const commit = useMutation({
     mutationFn: () =>
       api.scoreManual({ card_id: card!, merchant_id: merchant!, category, amount, away: distance > 100, distance_km: distance }),
-    onSuccess: (item) => router.push(`/transactions/${item.txn_id}`),
+    onSuccess: (item) => router.push(`/transaction?id=${item.txn_id}`),
   });
 
   const o = options.data;

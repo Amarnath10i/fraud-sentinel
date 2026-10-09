@@ -1,15 +1,16 @@
 "use client";
 
+import { Suspense } from "react";
 import { SlidersHorizontal } from "lucide-react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { CardState, FeedTable } from "@/components/feed";
 import { Card, Empty, buttonClass } from "@/components/ui";
 import { api } from "@/lib/api";
 
-export default function CardPage() {
-  const { id } = useParams<{ id: string }>();
+function CardPageInner() {
+  const id = useSearchParams().get("id") ?? "";
   const router = useRouter();
   const card = useQuery({ queryKey: ["card", Number(id)], queryFn: () => api.card(id), refetchInterval: 4000 });
 
@@ -36,12 +37,20 @@ export default function CardPage() {
         </Card>
         <Card title="Recent transactions on this card" subtitle="From this replay session, newest first">
           {c.recent.length ? (
-            <FeedTable items={c.recent} onSelect={(it) => router.push(`/transactions/${it.txn_id}`)} maxHeight={520} />
+            <FeedTable items={c.recent} onSelect={(it) => router.push(`/transaction?id=${it.txn_id}`)} maxHeight={520} />
           ) : (
             <Empty>No transactions on this card in the replay yet.</Empty>
           )}
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function CardPage() {
+  return (
+    <Suspense fallback={<Empty>Loading…</Empty>}>
+      <CardPageInner />
+    </Suspense>
   );
 }

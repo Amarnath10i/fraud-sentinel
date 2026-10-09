@@ -51,7 +51,7 @@ export function FeedTable({
             >
               <td className="tabular px-2 py-1.5 whitespace-nowrap">{fmt.time(it.ts)}</td>
               <td className="px-2 py-1.5 whitespace-nowrap">
-                <Link href={`/cards/${it.card_id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
+                <Link href={`/card?id=${it.card_id}`} onClick={(e) => e.stopPropagation()} className="hover:underline">
                   {fmt.card(it.card_id)}
                 </Link>
               </td>
@@ -127,7 +127,7 @@ export function CardState({ cardId }: { cardId: number }) {
     <div>
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="text-[13px] font-semibold">
-          <Link href={`/cards/${c.card_id}`} className="hover:underline">
+          <Link href={`/card?id=${c.card_id}`} className="hover:underline">
             Card {c.masked}
           </Link>{" "}
           · {c.city}
@@ -174,7 +174,7 @@ export function Inspector({ item }: { item: FeedItem | null }) {
           Approved. Reason codes are computed only for review and decline; open the investigation for the full breakdown.
         </p>
       )}
-      <Link href={`/transactions/${item.txn_id}`} className={clsx(buttonClass("plain", true), "mt-4")}>
+      <Link href={`/transaction?id=${item.txn_id}`} className={clsx(buttonClass("plain", true), "mt-4")}>
         Investigate <ArrowRight size={13} />
       </Link>
       <div className="mt-5 border-t border-grid pt-4">

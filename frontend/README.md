@@ -21,12 +21,14 @@ allows `http://localhost:3000` through CORS by default (`SENTINEL_CORS_ORIGINS`)
 |---|---|
 | `/` | Running totals in dollars, how one transaction is scored, fraud stopped vs missed per day, latest alerts |
 | `/live` | The replay as it happens, with an inspector that follows each new alert |
-| `/transactions/[id]` | One decision: probability, expected cost of each action, full TreeSHAP waterfall, every model input |
-| `/cards/[id]` | A card's live streaming state and recent transactions |
+| `/transaction?id=` | One decision: probability, expected cost of each action, full TreeSHAP waterfall, every model input |
+| `/card?id=` | A card's live streaming state and recent transactions |
 | `/review` | The analyst queue; confirming fraud sends a chargeback into the online state |
 | `/whatif` | Change amount, hour, distance, category or merchant and watch the score respond, without recording anything |
 | `/models` | Production model, feature importance, hyperparameters, decision costs, registry history |
-| `/experiments` | Every generated report, rendered, with its key result charted |
+| `/experiments`, `/experiment?name=` | Every generated report, rendered, with its key result charted |
 | `/monitoring` | Alert-rate drift vs the calibration period, latency, the 18-month retraining backtest |
 
 Checks: `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` (all run in CI).
+
+`NEXT_OUTPUT=export NEXT_PUBLIC_API_URL= npm run build` exports a static site to `out/`, which `sentinel serve` serves on the API's own origin; that is how the public demo runs (`deploy/huggingface/`). Detail pages take their id as a query parameter so every page can be exported statically.

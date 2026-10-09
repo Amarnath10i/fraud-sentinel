@@ -23,7 +23,7 @@ export default function ExperimentsPage() {
       {list.length ? (
         <div className="grid gap-3 md:grid-cols-2">
           {list.map((r) => (
-            <Link key={r.name} href={`/experiments/${r.name}`} className="group">
+            <Link key={r.name} href={`/experiment?name=${r.name}`} className="group">
               <Card className="h-full transition-colors group-hover:border-accent">
                 <div className="flex items-start justify-between gap-3">
                   <div>

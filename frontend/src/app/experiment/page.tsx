@@ -1,8 +1,9 @@
 "use client";
 
+import { Suspense } from "react";
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { useQuery } from "@tanstack/react-query";
@@ -60,8 +61,8 @@ function KeyChart({ name, tables }: { name: string; tables: Table[] }) {
   return null;
 }
 
-export default function ReportPage() {
-  const { name } = useParams<{ name: string }>();
+function ReportPageInner() {
+  const name = useSearchParams().get("name") ?? "";
   const report = useQuery({ queryKey: ["report", name], queryFn: () => api.report(name) });
   if (report.error) return <Card><Empty>No report named “{name}”.</Empty></Card>;
   if (!report.data) return <Empty>Loading…</Empty>;
@@ -82,5 +83,13 @@ export default function ReportPage() {
         </article>
       </Card>
     </div>
+  );
+}
+
+export default function ReportPage() {
+  return (
+    <Suspense fallback={<Empty>Loading…</Empty>}>
+      <ReportPageInner />
+    </Suspense>
   );
 }
