@@ -22,6 +22,15 @@ class Resolve(BaseModel):
     fraud: bool
 
 
+class WhatIf(BaseModel):
+    card_id: int
+    merchant_id: int
+    category: str
+    amount: float = Field(gt=0, le=100_000)
+    hour: int | None = Field(None, ge=0, le=23)
+    distance_km: float = Field(0.0, ge=0, le=20_000)
+
+
 class ManualTxn(BaseModel):
     card_id: int
     merchant_id: int
@@ -79,6 +88,26 @@ def attach(app: FastAPI, state: dict) -> None:
             return demo().score_manual(t.card_id, t.merchant_id, t.category, t.amount, t.away)
         except KeyError as e:
             raise HTTPException(404, f"unknown card {t.card_id}") from e
+
+    @app.get("/v1/demo/daily")
+    def demo_daily() -> list[dict]:
+        return demo().daily_view()
+
+    @app.get("/v1/demo/transactions/{txn_id}")
+    def demo_transaction(txn_id: str) -> dict:
+        try:
+            return demo().transaction(txn_id)
+        except KeyError as e:
+            raise HTTPException(404, "transaction not in the recent replay window") from e
+
+    @app.post("/v1/demo/whatif")
+    def demo_whatif(w: WhatIf) -> dict:
+        try:
+            return demo().whatif(
+                w.card_id, w.merchant_id, w.category, w.amount, w.hour, w.distance_km
+            )
+        except KeyError as e:
+            raise HTTPException(404, f"unknown card {w.card_id}") from e
 
     @app.get("/v1/demo/monitoring")
     def demo_monitoring() -> dict:

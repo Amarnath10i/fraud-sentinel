@@ -52,6 +52,7 @@ class Scored:
     reasons: list[dict] = field(default_factory=list)
     latency_ms: float = 0.0
     duplicate: bool = False  # a retry of a transaction already scored
+    x: np.ndarray | None = field(default=None, repr=False)  # model input, for explanations
 
 
 class UnknownCard(KeyError):
@@ -123,7 +124,12 @@ class Scorer:
 
     # -- scoring ----------------------------------------------------------
 
-    def _vector(self, txn: dict, ts: int) -> np.ndarray:
+    def _vector(
+        self, txn: dict, ts: int, record: bool = True, hour: int | None = None
+    ) -> np.ndarray:
+        """Model input for a transaction. `record=False` reads the online state
+        without adding the transaction to it (what-if analysis); `hour` then
+        overrides the time-of-day features."""
         try:
             gender, dob_days, city_pop, home_lat, home_lon = self.customers[int(txn["card_id"])]
         except KeyError as e:
@@ -136,7 +142,7 @@ class Scorer:
             int(txn["merchant_id"]),
             str(txn["category"]),
         )
-        agg_vec = self.engine.process(ev, "txn")
+        agg_vec = self.engine.process(ev, "txn") if record else self.engine.peek(ev)
         one = lambda v: np.array([v])  # noqa: E731
         rows = row_features(
             {
@@ -146,9 +152,35 @@ class Scorer:
                 "merch_lat": one(float(txn["merch_lat"])), "merch_lon": one(float(txn["merch_lon"])),
             }
         )  # fmt: skip
+        if hour is not None:
+            rows["hour"] = one(float(hour))
+            rows["is_night"] = one(float(hour >= 22 or hour < 4))
         aggs = {name: agg_vec[i : i + 1] for i, name in enumerate(SPARKOV.names)}
         values = rows | aggs | derived_features(rows["amount"], aggs)
         return np.array([[values[f][0] for f in self.bundle.features]])
+
+    def explain(self, x: np.ndarray) -> dict:
+        """Full TreeSHAP decomposition of one prediction, largest effects first.
+
+        Contributions are in log-odds of the raw model and sum, with the base
+        value, to its margin; calibration then maps that margin's probability
+        monotonically to the served p_fraud.
+        """
+        contrib = self.bundle.booster.predict(x, pred_contrib=True, num_threads=1)[0]
+        base, parts = float(contrib[-1]), contrib[:-1]
+        order = np.argsort(-np.abs(parts))
+        return {
+            "base_value": base,
+            "margin": float(base + parts.sum()),
+            "contributions": [
+                {
+                    "feature": self.bundle.features[i],
+                    "value": None if np.isnan(x[0, i]) else float(x[0, i]),
+                    "contribution": float(parts[i]),
+                }
+                for i in order
+            ],
+        }
 
     def reasons(self, x: np.ndarray, k: int = 3) -> list[dict]:
         contrib = self.bundle.booster.predict(x, pred_contrib=True, num_threads=1)[0][:-1]
@@ -175,9 +207,24 @@ class Scorer:
             p = float(self.bundle.predict(x)[0])
             action = int(bayes_policy([p], [float(txn["amount"])], self.bundle.costs)[0])
             reasons = [] if action == APPROVE else self.reasons(x)
-            out = Scored(str(txn["txn_id"]), p, ACTION_NAMES[action], reasons)
+            out = Scored(str(txn["txn_id"]), p, ACTION_NAMES[action], reasons, x=x)
             self.recent.put(key, out)
         return replace(out, latency_ms=(time.perf_counter() - t0) * 1e3)
+
+    def whatif(self, txn: dict, hour: int | None = None) -> dict:
+        """Score a hypothetical transaction at the current clock without recording it."""
+        with self.lock:
+            now = self.engine.now or 0
+            x = self._vector(txn, now, record=False, hour=hour)
+        p = float(self.bundle.predict(x)[0])
+        action = int(bayes_policy([p], [float(txn["amount"])], self.bundle.costs)[0])
+        expected = self.bundle.costs.expected(np.array([p]), np.array([float(txn["amount"])]))[0]
+        return {
+            "p_fraud": p,
+            "decision": ACTION_NAMES[action],
+            "expected_cost": dict(zip(ACTION_NAMES, map(float, expected), strict=True)),
+            "explanation": self.explain(x),
+        }
 
     def chargeback(self, cb: dict) -> None:
         ts = cb["reported_at"] if isinstance(cb["reported_at"], int) else _epoch(cb["reported_at"])

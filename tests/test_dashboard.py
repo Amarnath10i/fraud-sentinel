@@ -118,3 +118,55 @@ def test_manual_scoring_card_view_queue_and_monitoring(client):
     assert len(m["thresholds"]) == len(m["reference"])
     assert c.post("/v1/demo/control", json={"action": "reset"}).status_code == 200
     assert c.get("/v1/demo/state").json()["stats"]["transactions"] == 0
+
+
+def test_frontend_endpoints(client):
+    c, cards = client
+    c.post("/v1/demo/control", json={"action": "start", "rate": 2000})
+    state = _wait_for(c, 300)
+
+    days = c.get("/v1/demo/daily").json()
+    assert sum(d["transactions"] for d in days) == state["stats"]["transactions"]
+    assert days == sorted(days, key=lambda d: d["date"])
+
+    item = state["items"][-1]
+    detail = c.get(f"/v1/demo/transactions/{item['txn_id']}").json()
+    expl = detail["explanation"]
+    assert len(expl["contributions"]) == len(model_features())
+    total = expl["base_value"] + sum(x["contribution"] for x in expl["contributions"])
+    assert total == pytest.approx(expl["margin"], abs=1e-9)
+    assert set(detail["expected_cost"]) == {"approve", "review", "decline"}
+    assert c.get("/v1/demo/transactions/nope").status_code == 404
+
+    card = int(cards[0])
+    before = c.get(f"/v1/demo/cards/{card}").json()["features"]
+    body = {"card_id": card, "merchant_id": 1, "category": "shopping_net", "amount": 50.0}
+    small = c.post("/v1/demo/whatif", json=body | {"hour": 14}).json()
+    big = c.post(
+        "/v1/demo/whatif", json=body | {"amount": 9_000.0, "hour": 2, "distance_km": 800}
+    ).json()
+    assert big["p_fraud"] >= small["p_fraud"]
+    assert set(big["expected_cost"]) == {"approve", "review", "decline"}
+    # what-if never touches the online state
+    assert c.get(f"/v1/demo/cards/{card}").json()["features"] == before
+    assert c.post("/v1/demo/whatif", json=body | {"card_id": 123}).status_code == 404
+    assert c.post("/v1/demo/whatif", json=body | {"hour": 25}).status_code == 422
+
+    models = c.get("/v1/models").json()
+    shares = [f["gain_share"] for f in models["production"]["importance"]]
+    assert shares == sorted(shares, reverse=True) and sum(shares) == pytest.approx(1.0)
+
+    names = [r["name"] for r in c.get("/v1/reports").json()]
+    assert "backtest" in names
+    assert c.get("/v1/reports/backtest").json()["markdown"].startswith("#")
+    assert c.get("/v1/reports/..%2Fpyproject").status_code == 404
+    assert c.get("/v1/reports/nope").status_code == 404
+
+
+def test_cors_allows_the_frontend_origin(client):
+    c, _ = client
+    r = c.options(
+        "/v1/demo/state",
+        headers={"Origin": "http://localhost:3000", "Access-Control-Request-Method": "GET"},
+    )
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"

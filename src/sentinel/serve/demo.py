@@ -24,7 +24,7 @@ import numpy as np
 import pandas as pd
 
 from sentinel.config import settings
-from sentinel.decision import APPROVE, DECLINE, REVIEW
+from sentinel.decision import ACTION_NAMES, APPROVE, DECLINE, REVIEW
 from sentinel.features.online import Event
 from sentinel.features.spec import SPARKOV
 from sentinel.monitoring.drift import SCORE_EDGES, alert_rate_ratio, psi
@@ -111,6 +111,8 @@ class DemoRunner:
         self.feed: deque[Item] = deque(maxlen=400)
         self.by_card: dict[int, deque[Item]] = {}
         self.items: dict[str, Item] = {}  # recent items by txn_id, for the inspector
+        self.vectors: dict[str, np.ndarray] = {}  # their model inputs, for full explanations
+        self.daily: dict[str, dict] = {}
         self.queue: dict[str, tuple[float, Item]] = {}
         self.alerts: deque[Item] = deque(maxlen=200)
         self.live_scores: deque[float] = deque(maxlen=20_000)
@@ -185,33 +187,20 @@ class DemoRunner:
         self.feed.append(item)
         self.by_card.setdefault(item.card_id, deque(maxlen=12)).append(item)
         self.items[item.txn_id] = item
+        if s.x is not None:
+            self.vectors[item.txn_id] = s.x
         if len(self.items) > 50_000:
             for k in list(self.items)[:10_000]:
                 del self.items[k]
+                self.vectors.pop(k, None)
         self.live_scores.append(s.p_fraud)
         self.latency.append(s.latency_ms)
         if s.decision != "approve":
             self.alerts.append(item)
 
-        st = self.stats
-        st["transactions"] += 1
-        st["manual"] += manual
-        st["reviews"] += s.decision == "review"
-        st["declines"] += s.decision == "decline"
-        if truth is not None:
-            action = np.array([_ACTION[s.decision]])
-            st["cost"] += float(
-                self.costs.realized(action, np.array([float(truth)]), np.array([item.amount]))[0]
-            )
-            if truth:
-                st["frauds"] += 1
-                st["fraud_amount"] += item.amount
-                if s.decision == "approve":
-                    st["fraud_missed_amount"] += item.amount
-                else:
-                    st["fraud_blocked_amount"] += item.amount
-            elif s.decision == "decline":
-                st["false_declines"] += 1
+        self.stats["manual"] += manual
+        for bucket in (self.stats, self._day(ts)):
+            self._bump(bucket, s.decision, truth, item.amount)
         if s.decision == "review":
             exp = self.costs.expected(np.array([s.p_fraud]), np.array([item.amount]))[0]
             saving = float(min(exp[APPROVE], exp[DECLINE]) - exp[REVIEW])
@@ -223,7 +212,75 @@ class DemoRunner:
                     del self.queue[k]
         return item
 
+    def _day(self, ts: int) -> dict:
+        key = time.strftime("%Y-%m-%d", time.gmtime(ts))
+        day = self.daily.get(key)
+        if day is None:
+            day = self.daily[key] = {
+                "date": key, "transactions": 0, "frauds": 0, "fraud_amount": 0.0,
+                "fraud_blocked_amount": 0.0, "fraud_missed_amount": 0.0, "reviews": 0,
+                "declines": 0, "false_declines": 0, "cost": 0.0,
+            }  # fmt: skip
+        return day
+
+    def _bump(self, st: dict, decision: str, truth: bool | None, amount: float) -> None:
+        st["transactions"] += 1
+        st["reviews"] += decision == "review"
+        st["declines"] += decision == "decline"
+        if truth is None:
+            return
+        action = np.array([_ACTION[decision]])
+        st["cost"] += float(
+            self.costs.realized(action, np.array([float(truth)]), np.array([amount]))[0]
+        )
+        if truth:
+            st["frauds"] += 1
+            st["fraud_amount"] += amount
+            if decision == "approve":
+                st["fraud_missed_amount"] += amount
+            else:
+                st["fraud_blocked_amount"] += amount
+        elif decision == "decline":
+            st["false_declines"] += 1
+
     # -- views ------------------------------------------------------------
+
+    def daily_view(self) -> list[dict]:
+        with self.lock:
+            days = [dict(d) for _, d in sorted(self.daily.items())]
+        for d in days:
+            d["saving_vs_approve_all"] = d["fraud_amount"] - d["cost"]
+        return days
+
+    def transaction(self, txn_id: str) -> dict:
+        """One scored transaction with its full explanation and per-action expected cost."""
+        with self.lock:
+            item = self.items.get(txn_id)
+            x = self.vectors.get(txn_id)
+            in_queue = txn_id in self.queue
+        if item is None:
+            raise KeyError(txn_id)
+        expected = self.costs.expected(np.array([item.p_fraud]), np.array([item.amount]))[0]
+        return self._item_dict(item) | {
+            "in_queue": in_queue,
+            "expected_cost": dict(zip(ACTION_NAMES, map(float, expected), strict=True)),
+            "explanation": self.scorer.explain(x) if x is not None else None,
+        }
+
+    def whatif(
+        self, card_id: int, merchant_id: int, category: str, amount: float, hour: int | None,
+        distance_km: float,
+    ) -> dict:  # fmt: skip
+        """Score a hypothetical transaction for this card right now, without recording it."""
+        c = self.customers.loc[card_id]
+        txn = {
+            "card_id": card_id, "merchant_id": merchant_id, "category": category, "amount": amount,
+            # due north of home: 1 degree of latitude is ~111.2 km
+            "merch_lat": float(c["home_lat"]) + distance_km / 111.2, "merch_lon": float(c["home_lon"]),
+        }  # fmt: skip
+        out = self.scorer.whatif(txn, hour=hour)
+        out["clock"] = self.scorer.engine.now
+        return out
 
     def view(self, after: int = 0) -> dict:
         with self.lock:

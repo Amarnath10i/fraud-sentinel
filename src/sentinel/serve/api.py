@@ -3,6 +3,8 @@
     POST /v1/score        score one authorization request
     POST /v1/chargebacks  report a chargeback (updates online state)
     GET  /v1/model        production model metadata
+    GET  /v1/models       registry history + production feature importance
+    GET  /v1/reports      generated experiment reports (markdown)
     GET  /health
 
 Predictions are logged to PostgreSQL by a background thread in batches, so a
@@ -24,8 +26,10 @@ from datetime import datetime
 from pathlib import Path
 from uuid import UUID
 
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from sentinel import db
@@ -187,6 +191,13 @@ def create_app(
             state["log"].close()
 
     app = FastAPI(title="fraud-sentinel", version="0.1.0", lifespan=lifespan)
+    # the Next.js frontend runs on its own origin during development
+    origins = os.environ.get(
+        "SENTINEL_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000"
+    ).split(",")
+    app.add_middleware(
+        CORSMiddleware, allow_origins=origins, allow_methods=["*"], allow_headers=["*"]
+    )
     if demo:
         from sentinel.serve.dashboard import attach
 
@@ -205,6 +216,59 @@ def create_app(
             "feature_spec": b.feature_spec,
             "features": b.features,
             "meta": b.meta,
+        }
+
+    @app.get("/v1/models")
+    def models() -> dict:
+        b: Bundle = state["scorer"].bundle
+        gain = b.booster.feature_importance("gain")
+        share = gain / gain.sum() if gain.sum() else gain
+        order = np.argsort(-share)
+        importance = [{"feature": b.features[i], "gain_share": float(share[i])} for i in order]
+        try:
+            with db.connect() as conn:
+                rows = conn.execute(
+                    "SELECT version, created_at, stage, algorithm, feature_set, train_start, "
+                    "train_end, label_cutoff, params, metrics FROM model_registry "
+                    "ORDER BY created_at DESC"
+                ).fetchall()
+        except Exception:  # still useful without the database
+            rows = []
+        cols = ["version", "created_at", "stage", "algorithm", "feature_set", "train_start",
+                "train_end", "label_cutoff", "params", "metrics"]  # fmt: skip
+        registry = [
+            {
+                c: (v.isoformat() if isinstance(v, datetime) else v)
+                for c, v in zip(cols, r, strict=True)
+            }
+            for r in rows
+        ]
+        return {
+            "production": {
+                "version": b.version,
+                "feature_spec": b.feature_spec,
+                "n_features": len(b.features),
+                "trees": b.booster.num_trees(),
+                "costs": b.costs.__dict__,
+                "meta": b.meta,
+                "importance": importance,
+            },
+            "registry": registry,
+        }
+
+    @app.get("/v1/reports")
+    def reports() -> list[dict]:
+        return [{"name": p.stem, "title": _title(p)} for p in _report_files()]
+
+    @app.get("/v1/reports/{name}")
+    def report(name: str) -> dict:
+        files = {p.stem: p for p in _report_files()}
+        if name not in files:  # only known report names, never a path
+            raise HTTPException(404, f"no report named {name}")
+        return {
+            "name": name,
+            "title": _title(files[name]),
+            "markdown": files[name].read_text("utf-8"),
         }
 
     @app.post("/v1/score", response_model=ScoreOut)
@@ -232,3 +296,12 @@ def create_app(
             raise HTTPException(409, str(e)) from e
 
     return app
+
+
+def _report_files() -> list[Path]:
+    return sorted(settings.paths.reports.glob("*.md"))
+
+
+def _title(path: Path) -> str:
+    first = path.read_text("utf-8").splitlines()[0] if path.stat().st_size else path.stem
+    return first.lstrip("# ").strip()
