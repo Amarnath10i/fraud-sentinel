@@ -1,0 +1,162 @@
+@import "tailwindcss";
+
+/* dark mode is a class on <html>, set before first paint (see layout.tsx) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+  --page: #f9f9f7;
+  --surface: #fcfcfb;
+  --surface-2: #f3f2ee;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --muted: #898781;
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --accent: #2a78d6;
+  --accent-wash: rgba(42, 120, 214, 0.08);
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --good-ink: #006300;
+  --critical-ink: #b42323;
+  /* diverging pair for signed effects (towards fraud / towards legitimate) */
+  --diverge-pos: #e34948;
+  --diverge-neg: #2a78d6;
+}
+
+.dark {
+  color-scheme: dark;
+  --page: #0d0d0d;
+  --surface: #1a1a19;
+  --surface-2: #232321;
+  --ink: #ffffff;
+  --ink-2: #c3c2b7;
+  --muted: #898781;
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #3987e5;
+  --accent-wash: rgba(57, 135, 229, 0.14);
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --good-ink: #0ca30c;
+  --critical-ink: #e66767;
+  --diverge-pos: #e66767;
+  --diverge-neg: #3987e5;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-grid: var(--grid);
+  --color-axis: var(--axis);
+  --color-line: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-wash: var(--accent-wash);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --color-good-ink: var(--good-ink);
+  --color-critical-ink: var(--critical-ink);
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html,
+body {
+  background: var(--page);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* markdown reports */
+.report h1 {
+  font-size: 22px;
+  font-weight: 650;
+  margin: 0 0 12px;
+}
+.report h2 {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 24px 0 8px;
+}
+.report p,
+.report li {
+  color: var(--ink-2);
+  max-width: 80ch;
+}
+.report p {
+  margin: 8px 0;
+}
+.report ul {
+  list-style: disc;
+  padding-left: 20px;
+}
+.report code {
+  font-size: 12.5px;
+  background: var(--surface-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.report pre {
+  background: var(--surface-2);
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.report table {
+  border-collapse: collapse;
+  font-size: 12.5px;
+  margin: 10px 0;
+  display: block;
+  overflow-x: auto;
+  max-width: 100%;
+}
+.report th {
+  text-align: left;
+  color: var(--ink-2);
+  font-weight: 600;
+  border-bottom: 1px solid var(--grid);
+  padding: 6px 10px;
+  white-space: nowrap;
+}
+.report td {
+  border-bottom: 1px solid var(--grid);
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes flash {
+  from {
+    background: var(--accent-wash);
+  }
+  to {
+    background: transparent;
+  }
+}
+.flash {
+  animation: flash 1.4s ease-out;
+}
