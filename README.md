@@ -103,14 +103,39 @@ uv run pytest               # unit + property tests; PostgreSQL tests run when a
 
 ![Monitoring tab](docs/monitoring.png)
 
-Example request:
+Example requests against a freshly started server (its online state is warmed up to 2020-06-21 12:14 UTC, and events must arrive in time order):
 
 ```bash
+# a $64 grocery purchase near home in the afternoon -> approve
 curl -s localhost:8000/v1/score -H 'content-type: application/json' -d '{
   "txn_id": "6c3f0a3a5b0c4d2e9f1a2b3c4d5e6f70", "ts": "2020-06-21T13:00:00Z",
+  "card_id": 4613314721966, "merchant_id": 412, "category": "grocery_pos",
+  "amount": 64.20, "merch_lat": 35.9, "merch_lon": -81.6}'
+
+# the same card, $1,020 online at 02:30 -> review
+curl -s localhost:8000/v1/score -H 'content-type: application/json' -d '{
+  "txn_id": "6c3f0a3a5b0c4d2e9f1a2b3c4d5e6f71", "ts": "2020-06-22T02:30:00Z",
   "card_id": 4613314721966, "merchant_id": 412, "category": "shopping_net",
   "amount": 1020.15, "merch_lat": 40.2, "merch_lon": -78.4}'
 ```
+
+```json
+{
+  "txn_id": "6c3f0a3a-5b0c-4d2e-9f1a-2b3c4d5e6f71",
+  "p_fraud": 0.0339,
+  "decision": "review",
+  "reasons": [
+    {"feature": "amount", "value": 1020.15, "contribution": 6.99},
+    {"feature": "hour", "value": 2.0, "contribution": 1.56},
+    {"feature": "amount_to_card_category_mean", "value": 8.26, "contribution": 1.37}
+  ],
+  "model_version": "lgbm-20261008-215822",
+  "latency_ms": 1.1,
+  "duplicate": false
+}
+```
+
+Sending the same `txn_id` again (a network retry) returns the same decision with `"duplicate": true` and does not count the transaction twice in the card's velocity features.
 
 ## Repository layout
 

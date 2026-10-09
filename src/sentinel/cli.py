@@ -81,7 +81,7 @@ def _decisions(args: argparse.Namespace) -> None:
     print(run())
 
 
-@command("sketches", "Benchmark Count-Min Sketch against exact pair counts")
+@command("sketches", "Benchmark Count-Min Sketch and a Bloom filter against exact counts")
 def _sketches(args: argparse.Namespace) -> None:
     from sentinel.experiments.sketches import run
 
